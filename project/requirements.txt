@@ -1,0 +1,4 @@
+flask==2.0.1
+gunicorn
+openai==0.28
+Werkzeug==2.2.3
