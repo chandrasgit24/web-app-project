@@ -8,8 +8,6 @@ on:
 
 env:
   PYTHON_VERSION: '3.10'
-  AZURE_WEBAPP_NAME: 'projectwebapp'
-  AZURE_WEBAPP_SLOT: 'Production'
 
 jobs:
   build:
@@ -60,8 +58,8 @@ jobs:
   deploy:
     runs-on: ubuntu-22.04
     needs: build
-    environment:
-      name: ${{ env.AZURE_WEBAPP_SLOT }}
+    environment: 
+      name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
     permissions:
@@ -86,6 +84,6 @@ jobs:
         uses: azure/webapps-deploy@v3.1.0
         id: deploy-to-webapp
         with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          slot-name: ${{ env.AZURE_WEBAPP_SLOT }}
+          app-name: 'projectwebapp'
+          slot-name: 'Production'
           package: release.zip
