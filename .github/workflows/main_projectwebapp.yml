@@ -8,11 +8,11 @@ on:
 
 env:
   PYTHON_VERSION: '3.10'
-  AZURE_WEBAPP_NAME: 'projectwebapp'  # Define as env variable but use directly in steps
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     permissions:
       contents: read
       actions: read
@@ -22,37 +22,41 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Debug Python version
-        run: echo "Using Python ${{ env.PYTHON_VERSION }}"
+      - name: Clear GitHub Actions cache
+        run: |
+          sudo rm -rf /opt/hostedtoolcache/Python/
+          sudo rm -rf /usr/local/lib/python*
+          echo "Cache cleared"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Python (with retry)
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
+      - name: Verify Python installation
+        run: |
+          python --version
+          which python
+          pip --version
+
       - name: Create virtual environment
         run: |
           python -m venv venv
-          echo "VENV_PATH=$PWD/venv" >> $GITHUB_ENV
+          source venv/bin/activate
+          echo "VIRTUAL_ENV=$PWD/venv" >> $GITHUB_ENV
+          echo "$PWD/venv/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: |
-          source $VENV_PATH/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip list  # Debug installed packages
-
-      - name: Run basic sanity check
-        run: |
-          source $VENV_PATH/bin/activate
-          python -c "import sys; print(f'Python {sys.version}')"
-          [ -f requirements.txt ] && echo "requirements.txt exists" || echo "requirements.txt missing"
+          pip list
 
       - name: Create deployment package
         run: |
           zip -r release.zip . -x 'venv/*' '.*' '__pycache__/*' '*.git*'
-          ls -lh release.zip  # Show package size
+          ls -lh release.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,31 +70,23 @@ jobs:
     needs: build
     environment: 
       name: 'Production'
-      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-
+    
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: python-app
 
-      - name: Show deployment files
-        run: |
-          ls -la
-          unzip -l release.zip | head -20  # Show first 20 files in zip
-
       - name: Login to Azure
-        uses: azure/login@v2.1.0
+        uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID }}
-        continue-on-error: false
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v3.1.0
-        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v2
         with:
-          app-name: 'projectwebapp'  # Using hardcoded value
-          slot-name: 'Production'    # Using hardcoded value
+          app-name: 'projectwebapp'
+          slot-name: 'Production'
           package: release.zip
